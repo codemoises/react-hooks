@@ -1,5 +1,5 @@
 export const globalState = {
-  title: 'O titulo que contexto',
+  title: 'O título que contexto',
   body: 'O body do context',
   counter: 0,
 };
