@@ -1,101 +1,85 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-const isObjectEqual = (objA, objB) => {
-  return JSON.stringify(objA) === JSON.stringify(objB);
+const useAsync = (asyncFunction, shouldRun) => {
+  const [state, setState] = useState({
+    result: null,
+    error: null,
+    status: 'idle',
+  });
+
+  const run = useCallback(() => {
+    setState({
+      result: null,
+      error: null,
+      status: 'pending',
+    });
+
+    return asyncFunction()
+      .then((response) => {
+        setState({
+          result: response,
+          error: null,
+          status: 'settled',
+        });
+      })
+      .catch((err) => {
+        setState({
+          result: null,
+          error: err,
+          status: 'error',
+        });
+      });
+  }, [asyncFunction]);
+
+  useEffect(() => {
+    if (shouldRun) {
+      run();
+    }
+  }, [run, shouldRun]);
+
+  return [run, state.result, state.error, state.status];
 };
 
-const useFetch = (url, options) => {
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [shouldLoad, setShouldLoad] = useState(false);
-  const urlRef = useRef(url);
-  const optionsRef = useRef(options);
-
-  useEffect(() => {
-    let changed = false;
-
-    if (!isObjectEqual(url, urlRef.current)) {
-      urlRef.current = url;
-      changed = true;
-    }
-    if (!isObjectEqual(options, optionsRef.current)) {
-      optionsRef.current = options;
-      changed = true;
-    }
-
-    if (changed) {
-      setShouldLoad((s) => !s);
-    }
-  }, [url, options]);
-
-  useEffect(() => {
-    let wait = false;
-    const controller = new AbortController();
-    const signal = controller.signal;
-
-    setLoading(true);
-
-    const fetchData = async () => {
-      await new Promise((r) => setTimeout(r, 3000));
-
-      try {
-        const response = await fetch(urlRef.current, { signal, ...optionsRef.current });
-        const jsonResult = await response.json();
-
-        if (!wait) {
-          setResult(jsonResult);
-          setLoading(false);
-        }
-      } catch (e) {
-        if (!wait) {
-          setLoading(false);
-        }
-        console.log('MY ERROR:', e.message);
-      }
-    };
-    fetchData();
-    return () => {
-      wait = true;
-      controller.abort();
-    };
-  }, [shouldLoad]);
-
-  return [result, loading];
+const fetchData = async () => {
+  const data = await fetch('https://jsonplaceholder.typicode.com/posts/');
+  const json = await data.json();
+  return json;
 };
 
 export const Home = () => {
-  const [postId, setPostId] = useState('');
-  const [result, loading] = useFetch('https://jsonplaceholder.typicode.com/posts/' + postId, {
-    headers: {
-      abc: '1' + postId,
-    },
-  });
+  const [posts, setPosts] = useState(null);
+  const [reFetchData, result, error, status] = useAsync(fetchData, true);
+  const [reFetchData2, result2, error2, status2] = useAsync(fetchData, true);
 
-  if (loading) {
-    return <p>loading...</p>;
+  useEffect(() => {
+    setTimeout(() => {
+      reFetchData();
+    }, 6000);
+  }, [reFetchData]);
+
+  useEffect(() => {
+    console.log(result2);
+  }, [result2]);
+
+  function handleClick() {
+    reFetchData();
   }
 
-  const handleClick = (id) => {
-    setPostId(id);
-    console.log('ID do post', postId);
-  };
-
-  if (!loading && result) {
-    return (
-      <div>
-        {result?.length > 0 ? (
-          result.map((p) => (
-            <div key={`post-${p.id}`} onClick={() => handleClick(p.id)}>
-              <p>{p.title}</p>
-            </div>
-          ))
-        ) : (
-          <div onClick={() => handleClick('')}>
-            <p>{result.title}</p>
-          </div>
-        )}
-      </div>
-    );
+  if (status === 'idle') {
+    return <pre>idle: Nada executando</pre>;
   }
-  return <h1>oi</h1>;
+
+  if (status === 'pending') {
+    return <pre>pending: Loading...</pre>;
+  }
+
+  if (status === 'error') {
+    return <pre>error: {error.message}</pre>;
+  }
+
+  if (status === 'settled') {
+    return <pre onClick={handleClick}>settled: {JSON.stringify(result, null, 2)}</pre>;
+  }
+
+  return 'IXIII';
 };
